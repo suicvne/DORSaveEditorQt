@@ -13,6 +13,16 @@ void DORInfoTabModel::SetContext(DORSave* InSave, const PSUArchive* InArchive, c
     endResetModel();
 }
 
+void DORInfoTabModel::SetPath(const QString& InPath)
+{
+    if(Path == InPath) { return; }
+
+    Path = InPath;
+
+    const QModelIndex OpenedPathIndex = IndexForField(OpenedPathField, ValueColumn);
+    emit dataChanged(OpenedPathIndex, OpenedPathIndex, { Qt::DisplayRole });
+}
+
 DORSave* DORInfoTabModel::GetSave() const
 {
     return Save;
@@ -221,6 +231,7 @@ const DORInfoTabModel::FieldDefinition* DORInfoTabModel::FieldDefinitions(size_t
         { SaveEntryNameField, IdentityGroup, "Save Entry Name" },
 
         { ChecksumField, IntegrityGroup, "Checksum" },
+        { ProfileTokenField, IntegrityGroup, "Profile Token" },
 
         { OpenedPathField, FileGroup, "Opened Path" },
         { ContainerTypeField, FileGroup, "Container Type" },
@@ -357,6 +368,9 @@ QVariant DORInfoTabModel::FieldData(Field FieldId, int Column, int Role) const
         case ChecksumField:
             return Checksum();
 
+        case ProfileTokenField:
+            return ProfileToken();
+
         case OpenedPathField:
             return Path.isEmpty() ? QVariant() : Path;
 
@@ -475,6 +489,24 @@ QString DORInfoTabModel::Checksum() const
 
     const QString Value = QString::number(DORSave_GetChecksum(Save), 16).toUpper().rightJustified(4, QChar('0'));
     return QStringLiteral("0x%1").arg(Value);
+}
+
+QString DORInfoTabModel::ProfileToken() const
+{
+    if(Save == nullptr) { return QString(); }
+
+    const uint8_t* Bytes = nullptr;
+    size_t ByteCount = 0;
+    if(DORSave_GetProfileTokenBytes(Save, &Bytes, &ByteCount) != DORStatusOk) { return QString(); }
+
+    QString Result;
+    for(size_t ByteIndex = 0; ByteIndex < ByteCount; ++ByteIndex)
+    {
+        if(ByteIndex > 0) { Result.append(QLatin1Char(' ')); }
+        Result.append(QStringLiteral("%1").arg(Bytes[ByteIndex], 2, 16, QChar('0')).toUpper());
+    }
+
+    return Result;
 }
 
 QString DORInfoTabModel::SaveEntryName() const

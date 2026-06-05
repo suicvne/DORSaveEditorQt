@@ -16,16 +16,16 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <property name="leftMargin">
-     <number>0</number>
+     <number>8</number>
     </property>
     <property name="topMargin">
-     <number>0</number>
+     <number>8</number>
     </property>
     <property name="rightMargin">
-     <number>0</number>
+     <number>8</number>
     </property>
     <property name="bottomMargin">
-     <number>0</number>
+     <number>8</number>
     </property>
     <item>
      <widget class="QTabWidget" name="tabWidget">
@@ -116,16 +116,33 @@
      <string>File</string>
     </property>
     <addaction name="actionOpen_Save"/>
+    <addaction name="actionSave"/>
+    <addaction name="actionSave_as"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
   <action name="actionOpen_Save">
    <property name="text">
-    <string>Open Save</string>
+    <string>Open</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="text">
+    <string>Save</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="actionSave_as">
+   <property name="text">
+    <string>Save as</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+S</string>
    </property>
   </action>
  </widget>

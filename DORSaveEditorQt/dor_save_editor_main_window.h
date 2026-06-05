@@ -38,7 +38,13 @@ public:
 private slots:
     void on_actionOpen_Save_triggered();
 
+    void on_actionSave_triggered();
+
+    void on_actionSave_as_triggered();
+
 private:
+    bool SaveFile(QString OutPath);
+
     Ui::DORSaveTreeViewerMainWindow *ui;
     AppContext Ctx = {};
     DORInfoTabModel InfoTabModel;

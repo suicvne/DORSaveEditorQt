@@ -5,6 +5,7 @@
 #include <PSU.h>
 
 #include <QFileDialog.h>
+#include <QFileInfo>
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QTreeView>
@@ -19,6 +20,17 @@ namespace
         Header->setMinimumSectionSize(80);
         Header->setSectionResizeMode(NameColumn, QHeaderView::Interactive);
         Header->setSectionResizeMode(ValueColumn, QHeaderView::Interactive);
+        Header->setResizeContentsPrecision(100);
+    }
+
+    void ConfigureTreeViewStretchValueColumn(QTreeView* TreeView, int NameColumn, int ValueColumn)
+    {
+        QHeaderView* Header = TreeView->header();
+
+        Header->setStretchLastSection(false);
+        Header->setMinimumSectionSize(80);
+        Header->setSectionResizeMode(NameColumn, QHeaderView::ResizeToContents);
+        Header->setSectionResizeMode(ValueColumn, QHeaderView::Stretch);
         Header->setResizeContentsPrecision(100);
     }
 
@@ -50,13 +62,12 @@ DORSaveTreeViewerMainWindow::DORSaveTreeViewerMainWindow(QWidget *parent)
     ui->decksTreeView->setModel(&DecksModel);
     ConfigureTreeViewColumnSizing(ui->infoTreeView, DORInfoTabModel::NameColumn, DORInfoTabModel::ValueColumn);
     ConfigureTreeViewColumnSizing(ui->chestTreeView, DORChestModel::NameColumn, DORChestModel::ValueColumn);
-    ConfigureTreeViewColumnSizing(ui->decksTreeView, DORDecksModel::NameColumn, DORDecksModel::ValueColumn);
+    ConfigureTreeViewStretchValueColumn(ui->decksTreeView, DORDecksModel::NameColumn, DORDecksModel::ValueColumn);
     ExpandTreeViewToDepth(ui->infoTreeView, 1);
     ExpandTreeViewToDepth(ui->chestTreeView, 0);
     ExpandTreeViewToDepth(ui->decksTreeView, 0);
     AutoSizeTreeViewColumns(ui->infoTreeView);
     AutoSizeTreeViewColumns(ui->chestTreeView);
-    AutoSizeTreeViewColumns(ui->decksTreeView);
 
     connect(&InfoTabModel, &QAbstractItemModel::dataChanged, this, [this]() {
         setWindowModified(true);
@@ -90,16 +101,106 @@ void DORSaveTreeViewerMainWindow::on_actionOpen_Save_triggered()
     SyncWindowTitle();
 }
 
+
+void DORSaveTreeViewerMainWindow::on_actionSave_triggered()
+{
+    if(Ctx.Path.isEmpty())
+    {
+        on_actionSave_as_triggered();
+        return;
+    }
+
+    SaveFile(Ctx.Path);
+}
+
+
+void DORSaveTreeViewerMainWindow::on_actionSave_as_triggered()
+{
+    if(Ctx.pSave == nullptr || Ctx.pArchive == nullptr)
+    {
+        ShowError("Error saving save", "No save file is currently open.");
+        return;
+    }
+
+    // save as dialog
+    QString OutPath = QFileDialog::getSaveFileName(
+        this,
+        "Save DOR save file",
+        Ctx.Path,
+        "PSU Save Files (*.psu);;All Files (*)");
+
+    // ensure path not empty, ends with .psu
+    if(OutPath.isEmpty()) { return; }
+    if(QFileInfo(OutPath).suffix().isEmpty())
+    {
+        OutPath += ".psu";
+    }
+
+    // save the file.
+    if(!SaveFile(OutPath)) { return; }
+
+    // update context, path, sync window title.
+    Ctx.Path = OutPath;
+    setWindowFilePath(Ctx.Path);
+    InfoTabModel.SetPath(Ctx.Path);
+    setWindowModified(false);
+    SyncWindowTitle();
+}
+
+bool DORSaveTreeViewerMainWindow::SaveFile(QString OutPath)
+{
+    if(Ctx.pSave == nullptr || Ctx.pArchive == nullptr)
+    {
+        ShowError("Error saving save", "No save file is currently open.");
+        return false;
+    }
+
+    // find the game file name entry in the .spu
+    PSUEntryInfo GameEntry;
+    PSUStatus LastPSUStatus = PSUArchive_FindFile(Ctx.pArchive, DORSaveFileNameNTSC, &GameEntry);
+    if(LastPSUStatus != PSUStatusOk)
+    {
+        ShowError("Error saving save", QString("Error finding DOR game data: %1").arg(PSUStatus_ToString(LastPSUStatus)));
+        return false;
+    }
+
+    // set the save byte data.
+    LastPSUStatus = PSUArchive_SetFileData(
+        Ctx.pArchive,
+        &GameEntry,
+        DORSave_GetBytes(Ctx.pSave),
+        DORSave_GetSize(Ctx.pSave));
+
+    if(LastPSUStatus != PSUStatusOk)
+    {
+        ShowError("Error saving save", QString("Error updating DOR game data: %1").arg(PSUStatus_ToString(LastPSUStatus)));
+        return false;
+    }
+
+    // write to file
+    const QByteArray Utf8Path = OutPath.toUtf8();
+    LastPSUStatus = PSUArchive_WriteToFile(Ctx.pArchive, Utf8Path.constData());
+    if(LastPSUStatus != PSUStatusOk)
+    {
+        ShowError("Error saving save", QString("Error writing PSU file: %1").arg(PSUStatus_ToString(LastPSUStatus)));
+        return false;
+    }
+
+    // clear modified bit on window, if appropriate.
+    setWindowModified(false);
+    return true;
+}
+
 void DORSaveTreeViewerMainWindow::SyncWindowTitle()
 {
     if(Ctx.pSave == nullptr)
     {
-        setWindowTitle("DOR Save Editor");
+        setWindowTitle("DOR Save Viewer");
         return;
     }
 
     // format -- show player name in the title bar.
-    QString Fmt("DOR Save Editor - %1");
+    QString Fmt("DOR Save Viewer - %1");
     char PlayerName[16] = { 0 };
 
     DORSave_GetPlayerName(Ctx.pSave, PlayerName, sizeof(PlayerName));
@@ -166,6 +267,5 @@ void DORSaveTreeViewerMainWindow::OpenSaveFile(QString InPath)
     ExpandTreeViewToDepth(ui->decksTreeView, 0);
     AutoSizeTreeViewColumns(ui->infoTreeView);
     AutoSizeTreeViewColumns(ui->chestTreeView);
-    AutoSizeTreeViewColumns(ui->decksTreeView);
 
 }

@@ -19,6 +19,7 @@ public:
     };
 
     void SetContext(DORSave* InSave, const PSUArchive* InArchive, const QString& InPath);
+    void SetPath(const QString& InPath);
     DORSave* GetSave() const;
     const PSUArchive* GetArchive() const;
     QString GetPath() const;
@@ -55,6 +56,7 @@ private:
         SaveEntryNameField,
 
         ChecksumField,
+        ProfileTokenField,
 
         OpenedPathField,
         ContainerTypeField,
@@ -117,6 +119,7 @@ private:
     QString PlayerName() const;
     QString RawPlayerNameBytes() const;
     QString Checksum() const;
+    QString ProfileToken() const;
     QString SaveEntryName() const;
     QString GameDataEntryOffset() const;
     QString GameDataEntrySize() const;
