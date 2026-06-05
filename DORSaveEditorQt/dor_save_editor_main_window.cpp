@@ -11,37 +11,57 @@
 
 namespace
 {
-void ConfigureTreeViewColumnSizing(QTreeView* TreeView, int NameColumn, int ValueColumn)
-{
-    QHeaderView* Header = TreeView->header();
+    void ConfigureTreeViewColumnSizing(QTreeView* TreeView, int NameColumn, int ValueColumn)
+    {
+        QHeaderView* Header = TreeView->header();
 
-    Header->setStretchLastSection(false);
-    Header->setMinimumSectionSize(80);
-    Header->setSectionResizeMode(NameColumn, QHeaderView::Stretch);
-    Header->setSectionResizeMode(ValueColumn, QHeaderView::ResizeToContents);
-    Header->setResizeContentsPrecision(100);
-}
+        Header->setStretchLastSection(false);
+        Header->setMinimumSectionSize(80);
+        Header->setSectionResizeMode(NameColumn, QHeaderView::Interactive);
+        Header->setSectionResizeMode(ValueColumn, QHeaderView::Interactive);
+        Header->setResizeContentsPrecision(100);
+    }
 
-void ExpandTreeViewRoot(QTreeView* TreeView)
-{
-    TreeView->expandToDepth(0);
-}
+    void AutoSizeTreeViewColumns(QTreeView* TreeView)
+    {
+        for(int Column = 0; Column < TreeView->model()->columnCount(); ++Column)
+        {
+            TreeView->resizeColumnToContents(Column);
+        }
+    }
+
+    void ExpandTreeViewRoot(QTreeView* TreeView)
+    {
+        TreeView->expandToDepth(0);
+    }
 }
 
 DORSaveTreeViewerMainWindow::DORSaveTreeViewerMainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::DORSaveTreeViewerMainWindow),
+      InfoTabModel(this),
       ChestModel(this),
       DecksModel(this)
 {
     ui->setupUi(this);
 
+    ui->infoTreeView->setModel(&InfoTabModel);
     ui->chestTreeView->setModel(&ChestModel);
     ui->decksTreeView->setModel(&DecksModel);
+    ConfigureTreeViewColumnSizing(ui->infoTreeView, DORInfoTabModel::NameColumn, DORInfoTabModel::ValueColumn);
     ConfigureTreeViewColumnSizing(ui->chestTreeView, DORChestModel::NameColumn, DORChestModel::ValueColumn);
     ConfigureTreeViewColumnSizing(ui->decksTreeView, DORDecksModel::NameColumn, DORDecksModel::ValueColumn);
+    ExpandTreeViewRoot(ui->infoTreeView);
     ExpandTreeViewRoot(ui->chestTreeView);
     ExpandTreeViewRoot(ui->decksTreeView);
+    AutoSizeTreeViewColumns(ui->infoTreeView);
+    AutoSizeTreeViewColumns(ui->chestTreeView);
+    AutoSizeTreeViewColumns(ui->decksTreeView);
+
+    connect(&InfoTabModel, &QAbstractItemModel::dataChanged, this, [this]() {
+        setWindowModified(true);
+        SyncWindowTitle();
+    });
 
     SyncWindowTitle();
 }
@@ -103,6 +123,7 @@ void DORSaveTreeViewerMainWindow::OpenSaveFile(QString InPath)
     // close previous, if appropriate.
     if(Ctx.pSave != nullptr)
     {
+        InfoTabModel.SetContext(nullptr, nullptr, QString());
         ChestModel.SetSave(nullptr);
         DecksModel.SetSave(nullptr);
 
@@ -123,16 +144,28 @@ void DORSaveTreeViewerMainWindow::OpenSaveFile(QString InPath)
     }
 
     // open DOR:
-    DORSave_CreateFromPSUArchive(Ctx.pArchive, &Ctx.pSave);
+    LastDORStatus = DORSave_CreateFromPSUArchive(Ctx.pArchive, &Ctx.pSave);
+    if(LastDORStatus != DORStatusOk)
+    {
+        ShowError("Error opening save", QString("Error: %1").arg(DORStatus_ToString(LastDORStatus)));
+        PSUArchive_Destroy(Ctx.pArchive);
+        Ctx.pArchive = nullptr;
+        return;
+    }
 
     // set path:
     Ctx.Path = InPath;
     setWindowFilePath(Ctx.Path);
 
     // bump update the model:
+    InfoTabModel.SetContext(Ctx.pSave, Ctx.pArchive, Ctx.Path);
     ChestModel.SetSave(Ctx.pSave);
     DecksModel.SetSave(Ctx.pSave);
+    ExpandTreeViewRoot(ui->infoTreeView);
     ExpandTreeViewRoot(ui->chestTreeView);
     ExpandTreeViewRoot(ui->decksTreeView);
+    AutoSizeTreeViewColumns(ui->infoTreeView);
+    AutoSizeTreeViewColumns(ui->chestTreeView);
+    AutoSizeTreeViewColumns(ui->decksTreeView);
 
 }

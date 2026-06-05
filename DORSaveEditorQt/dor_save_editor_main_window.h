@@ -5,6 +5,7 @@
 
 #include "dor_chest_model.h"
 #include "dor_decks_model.h"
+#include "dor_info_tab_model.h"
 
 struct PSUArchive;
 struct DORSave;
@@ -40,6 +41,7 @@ private slots:
 private:
     Ui::DORSaveTreeViewerMainWindow *ui;
     AppContext Ctx = {};
+    DORInfoTabModel InfoTabModel;
     DORChestModel ChestModel;
     DORDecksModel DecksModel;
 };

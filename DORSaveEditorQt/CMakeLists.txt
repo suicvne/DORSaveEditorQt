@@ -16,6 +16,7 @@ qt_add_executable(DORSaveEditorQt
     dor_save_editor_main_window.cpp
     dor_save_editor_main_window.h
     dor_save_editor_main_window.ui
+    dor_info_tab_model.h dor_info_tab_model.cpp
     dor_chest_model.h dor_chest_model.cpp
     dor_decks_model.h dor_decks_model.cpp
 )
