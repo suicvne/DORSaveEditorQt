@@ -36,7 +36,8 @@ private:
     enum ModelNodeType : quintptr {
         InvalidNode = 0,
         GroupNode = 1,
-        FieldNode = 2
+        FieldNode = 2,
+        DetailNode = 3
     };
 
     enum Group {
@@ -75,6 +76,11 @@ private:
         FieldCount
     };
 
+    enum Detail {
+        RawPlayerNameBytesDetail,
+        DetailCount
+    };
+
     struct FieldDefinition {
         Field Id;
         Group ParentGroup;
@@ -91,6 +97,7 @@ private:
 
     static quintptr MakeGroupNodeId(Group GroupId);
     static quintptr MakeFieldNodeId(Field FieldId);
+    static quintptr MakeDetailNodeId(Detail DetailId);
     static ModelNodeType NodeType(const QModelIndex& Index);
     static uint NodeValue(const QModelIndex& Index);
     static QString GroupName(Group GroupId);
@@ -103,10 +110,12 @@ private:
     QModelIndex IndexForField(Field FieldId, int Column) const;
     QVariant GroupData(Group GroupId, int Column) const;
     QVariant FieldData(Field FieldId, int Column, int Role) const;
+    QVariant DetailData(Detail DetailId, int Column, int Role) const;
     bool SetFieldData(Field FieldId, const QVariant& Value, int Role);
     Qt::ItemFlags FieldFlags(Field FieldId, int Column) const;
 
     QString PlayerName() const;
+    QString RawPlayerNameBytes() const;
     QString Checksum() const;
     QString SaveEntryName() const;
     QString GameDataEntryOffset() const;

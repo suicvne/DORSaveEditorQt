@@ -30,10 +30,10 @@ namespace
         }
     }
 
-    void ExpandTreeViewRoot(QTreeView* TreeView)
-    {
-        TreeView->expandToDepth(0);
-    }
+void ExpandTreeViewToDepth(QTreeView* TreeView, int Depth)
+{
+    TreeView->expandToDepth(Depth);
+}
 }
 
 DORSaveTreeViewerMainWindow::DORSaveTreeViewerMainWindow(QWidget *parent)
@@ -51,9 +51,9 @@ DORSaveTreeViewerMainWindow::DORSaveTreeViewerMainWindow(QWidget *parent)
     ConfigureTreeViewColumnSizing(ui->infoTreeView, DORInfoTabModel::NameColumn, DORInfoTabModel::ValueColumn);
     ConfigureTreeViewColumnSizing(ui->chestTreeView, DORChestModel::NameColumn, DORChestModel::ValueColumn);
     ConfigureTreeViewColumnSizing(ui->decksTreeView, DORDecksModel::NameColumn, DORDecksModel::ValueColumn);
-    ExpandTreeViewRoot(ui->infoTreeView);
-    ExpandTreeViewRoot(ui->chestTreeView);
-    ExpandTreeViewRoot(ui->decksTreeView);
+    ExpandTreeViewToDepth(ui->infoTreeView, 1);
+    ExpandTreeViewToDepth(ui->chestTreeView, 0);
+    ExpandTreeViewToDepth(ui->decksTreeView, 0);
     AutoSizeTreeViewColumns(ui->infoTreeView);
     AutoSizeTreeViewColumns(ui->chestTreeView);
     AutoSizeTreeViewColumns(ui->decksTreeView);
@@ -161,9 +161,9 @@ void DORSaveTreeViewerMainWindow::OpenSaveFile(QString InPath)
     InfoTabModel.SetContext(Ctx.pSave, Ctx.pArchive, Ctx.Path);
     ChestModel.SetSave(Ctx.pSave);
     DecksModel.SetSave(Ctx.pSave);
-    ExpandTreeViewRoot(ui->infoTreeView);
-    ExpandTreeViewRoot(ui->chestTreeView);
-    ExpandTreeViewRoot(ui->decksTreeView);
+    ExpandTreeViewToDepth(ui->infoTreeView, 1);
+    ExpandTreeViewToDepth(ui->chestTreeView, 0);
+    ExpandTreeViewToDepth(ui->decksTreeView, 0);
     AutoSizeTreeViewColumns(ui->infoTreeView);
     AutoSizeTreeViewColumns(ui->chestTreeView);
     AutoSizeTreeViewColumns(ui->decksTreeView);

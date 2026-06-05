@@ -38,6 +38,13 @@ QModelIndex DORInfoTabModel::index(int row, int column, const QModelIndex& paren
         return createIndex(row, column, MakeGroupNodeId(static_cast<Group>(row)));
     }
 
+    if(NodeType(parent) == FieldNode)
+    {
+        const Field FieldId = static_cast<Field>(NodeValue(parent));
+        if(FieldId != PlayerNameField || row != 0) { return QModelIndex(); }
+        return createIndex(row, column, MakeDetailNodeId(RawPlayerNameBytesDetail));
+    }
+
     if(NodeType(parent) != GroupNode) { return QModelIndex(); }
 
     const Group GroupId = static_cast<Group>(NodeValue(parent));
@@ -63,6 +70,13 @@ QModelIndex DORInfoTabModel::parent(const QModelIndex& child) const
             return createIndex(static_cast<int>(Definition->ParentGroup), 0, MakeGroupNodeId(Definition->ParentGroup));
         }
 
+        case DetailNode:
+            if(static_cast<Detail>(NodeValue(child)) == RawPlayerNameBytesDetail)
+            {
+                return IndexForField(PlayerNameField, 0);
+            }
+            return QModelIndex();
+
         default:
             return QModelIndex();
     }
@@ -77,6 +91,11 @@ int DORInfoTabModel::rowCount(const QModelIndex& parent) const
     if(NodeType(parent) == GroupNode)
     {
         return FieldCountForGroup(static_cast<Group>(NodeValue(parent)));
+    }
+
+    if(NodeType(parent) == FieldNode && static_cast<Field>(NodeValue(parent)) == PlayerNameField)
+    {
+        return 1;
     }
 
     return 0;
@@ -100,6 +119,9 @@ QVariant DORInfoTabModel::data(const QModelIndex& index, int role) const
 
         case FieldNode:
             return FieldData(static_cast<Field>(NodeValue(index)), index.column(), role);
+
+        case DetailNode:
+            return DetailData(static_cast<Detail>(NodeValue(index)), index.column(), role);
 
         default:
             return QVariant();
@@ -150,6 +172,11 @@ quintptr DORInfoTabModel::MakeGroupNodeId(Group GroupId)
 quintptr DORInfoTabModel::MakeFieldNodeId(Field FieldId)
 {
     return (static_cast<quintptr>(FieldId) << 2) | static_cast<quintptr>(FieldNode);
+}
+
+quintptr DORInfoTabModel::MakeDetailNodeId(Detail DetailId)
+{
+    return (static_cast<quintptr>(DetailId) << 2) | static_cast<quintptr>(DetailNode);
 }
 
 DORInfoTabModel::ModelNodeType DORInfoTabModel::NodeType(const QModelIndex& Index)
@@ -369,17 +396,37 @@ QVariant DORInfoTabModel::FieldData(Field FieldId, int Column, int Role) const
     }
 }
 
+QVariant DORInfoTabModel::DetailData(Detail DetailId, int Column, int Role) const
+{
+    if(Role != Qt::DisplayRole && Role != Qt::EditRole) { return QVariant(); }
+
+    switch(DetailId)
+    {
+        case RawPlayerNameBytesDetail:
+            if(Column == NameColumn) { return Role == Qt::DisplayRole ? QStringLiteral("Raw Bytes") : QVariant(); }
+            if(Column == ValueColumn) { return RawPlayerNameBytes(); }
+            return QVariant();
+
+        default:
+            return QVariant();
+    }
+}
+
 bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Role)
 {
     if(Role != Qt::EditRole || FieldId != PlayerNameField || Save == nullptr) { return false; }
 
     const QString NewName = Value.toString();
+    // if(NewName == PlayerName()) { return true; }
+
     const QByteArray EncodedName = NewName.toUtf8();
     if(DORSave_SetPlayerName(Save, EncodedName.constData()) != DORStatusOk) { return false; }
 
     const QModelIndex PlayerNameIndex = IndexForField(PlayerNameField, ValueColumn);
+    const QModelIndex RawNameBytesIndex = index(0, ValueColumn, IndexForField(PlayerNameField, 0));
     const QModelIndex ChecksumIndex = IndexForField(ChecksumField, ValueColumn);
     emit dataChanged(PlayerNameIndex, PlayerNameIndex, { Qt::DisplayRole, Qt::EditRole });
+    emit dataChanged(RawNameBytesIndex, RawNameBytesIndex, { Qt::DisplayRole });
     emit dataChanged(ChecksumIndex, ChecksumIndex, { Qt::DisplayRole });
     return true;
 }
@@ -402,6 +449,24 @@ QString DORInfoTabModel::PlayerName() const
     if(DORSave_GetPlayerName(Save, Name, sizeof(Name)) != DORStatusOk) { return QString(); }
 
     return QString::fromLatin1(Name);
+}
+
+QString DORInfoTabModel::RawPlayerNameBytes() const
+{
+    if(Save == nullptr) { return QString(); }
+
+    const uint8_t* Bytes = nullptr;
+    size_t ByteCount = 0;
+    if(DORSave_GetRawPlayerNameBytes(Save, &Bytes, &ByteCount) != DORStatusOk) { return QString(); }
+
+    QString Result;
+    for(size_t ByteIndex = 0; ByteIndex < ByteCount; ++ByteIndex)
+    {
+        if(ByteIndex > 0) { Result.append(QLatin1Char(' ')); }
+        Result.append(QStringLiteral("%1").arg(Bytes[ByteIndex], 2, 16, QChar('0')).toUpper());
+    }
+
+    return Result;
 }
 
 QString DORInfoTabModel::Checksum() const
