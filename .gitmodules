@@ -1,0 +1,3 @@
+[submodule "libdor"]
+	path = libdor
+	url = https://github.com/suicvne/libdor.git

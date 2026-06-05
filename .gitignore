@@ -1,3 +1,7 @@
+# Build
+[Bb]uild*
+.DS_Store
+
 # Prerequisites
 *.d
 
