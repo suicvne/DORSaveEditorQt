@@ -4,6 +4,7 @@
 #include <QMainWindow>
 
 #include "dor_chest_model.h"
+#include "dor_decks_model.h"
 
 struct PSUArchive;
 struct DORSave;
@@ -40,5 +41,6 @@ private:
     Ui::DORSaveTreeViewerMainWindow *ui;
     AppContext Ctx = {};
     DORChestModel ChestModel;
+    DORDecksModel DecksModel;
 };
 #endif // DOR_SAVE_EDITOR_MAIN_WINDOW_H

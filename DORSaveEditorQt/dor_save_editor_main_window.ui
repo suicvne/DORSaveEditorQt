@@ -102,6 +102,9 @@
    <property name="text">
     <string>Open Save</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
   </action>
  </widget>
  <resources/>

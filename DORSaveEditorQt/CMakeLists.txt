@@ -17,6 +17,7 @@ qt_add_executable(DORSaveEditorQt
     dor_save_editor_main_window.h
     dor_save_editor_main_window.ui
     dor_chest_model.h dor_chest_model.cpp
+    dor_decks_model.h dor_decks_model.cpp
 )
 
 target_link_libraries(DORSaveEditorQt

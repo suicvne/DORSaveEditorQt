@@ -5,16 +5,43 @@
 #include <PSU.h>
 
 #include <QFileDialog.h>
+#include <QHeaderView>
 #include <QMessageBox>
+#include <QTreeView>
+
+namespace
+{
+void ConfigureTreeViewColumnSizing(QTreeView* TreeView, int NameColumn, int ValueColumn)
+{
+    QHeaderView* Header = TreeView->header();
+
+    Header->setStretchLastSection(false);
+    Header->setMinimumSectionSize(80);
+    Header->setSectionResizeMode(NameColumn, QHeaderView::Stretch);
+    Header->setSectionResizeMode(ValueColumn, QHeaderView::ResizeToContents);
+    Header->setResizeContentsPrecision(100);
+}
+
+void ExpandTreeViewRoot(QTreeView* TreeView)
+{
+    TreeView->expandToDepth(0);
+}
+}
 
 DORSaveTreeViewerMainWindow::DORSaveTreeViewerMainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::DORSaveTreeViewerMainWindow),
-      ChestModel(this)
+      ChestModel(this),
+      DecksModel(this)
 {
     ui->setupUi(this);
 
     ui->chestTreeView->setModel(&ChestModel);
+    ui->decksTreeView->setModel(&DecksModel);
+    ConfigureTreeViewColumnSizing(ui->chestTreeView, DORChestModel::NameColumn, DORChestModel::ValueColumn);
+    ConfigureTreeViewColumnSizing(ui->decksTreeView, DORDecksModel::NameColumn, DORDecksModel::ValueColumn);
+    ExpandTreeViewRoot(ui->chestTreeView);
+    ExpandTreeViewRoot(ui->decksTreeView);
 
     SyncWindowTitle();
 }
@@ -77,6 +104,7 @@ void DORSaveTreeViewerMainWindow::OpenSaveFile(QString InPath)
     if(Ctx.pSave != nullptr)
     {
         ChestModel.SetSave(nullptr);
+        DecksModel.SetSave(nullptr);
 
         DORSave_Destroy(Ctx.pSave);
         PSUArchive_Destroy(Ctx.pArchive);
@@ -103,5 +131,8 @@ void DORSaveTreeViewerMainWindow::OpenSaveFile(QString InPath)
 
     // bump update the model:
     ChestModel.SetSave(Ctx.pSave);
+    DecksModel.SetSave(Ctx.pSave);
+    ExpandTreeViewRoot(ui->chestTreeView);
+    ExpandTreeViewRoot(ui->decksTreeView);
 
 }
