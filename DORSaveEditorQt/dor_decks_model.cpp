@@ -179,7 +179,7 @@ QVariant DORDecksModel::DeckData(uint DeckIndex, int Column) const
             return DeckName(DeckIndex);
 
         case ValueColumn:
-            return QStringLiteral("stored cost %1").arg(Info.StoredDeckCost);
+            return QStringLiteral("Deck cost %1").arg(Info.StoredDeckCost);
 
         default:
             return QVariant();

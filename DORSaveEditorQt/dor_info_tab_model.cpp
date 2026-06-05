@@ -325,7 +325,7 @@ QVariant DORInfoTabModel::GroupData(Group GroupId, int Column) const
             return GroupName(GroupId);
 
         case ValueColumn:
-            return Save == nullptr ? QStringLiteral("No save loaded") : QStringLiteral("%1 fields").arg(FieldCountForGroup(GroupId));
+            return Save == nullptr ? QStringLiteral("No save loaded") : QVariant();
 
         default:
             return QVariant();
