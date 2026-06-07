@@ -20,6 +20,11 @@ QString HexValue(qulonglong Value, int Width = 0)
     return QStringLiteral("0x%1").arg(Hex);
 }
 
+QString ByteCountValue(uint8_t Value)
+{
+    return QStringLiteral("%1 (%2)").arg(Value).arg(HexValue(Value, 2));
+}
+
 bool ParseU16Value(const QVariant& Value, uint16_t* pOutValue)
 {
     if(pOutValue == nullptr) { return false; }
@@ -368,6 +373,11 @@ const DORInfoTabModel::FieldDefinition* DORInfoTabModel::FieldDefinitions(size_t
         { ProfileProgressStateField, ProgressGroup, "Profile State Bytes" },
         { FooterProgressStateField, ProgressGroup, "Footer State Bytes" },
         { MapLocationStateField, ProgressGroup, "Map Location State" },
+        { CampaignProgressStateField, ProgressGroup, "Campaign State Bytes (Provisional)" },
+        { PotentialCampaignSideFlagField, ProgressGroup, "Potential Campaign Side Flag" },
+        { PotentialProfileLossCountField, ProgressGroup, "Potential Profile Loss Count" },
+        { PotentialFooterLossCountField, ProgressGroup, "Potential Footer Loss Count" },
+        { PotentialFooterDuelCountField, ProgressGroup, "Potential Footer Duel Count" },
     };
 
     if(pOutCount != nullptr) { *pOutCount = sizeof(Definitions) / sizeof(Definitions[0]); }
@@ -535,6 +545,21 @@ QVariant DORInfoTabModel::FieldData(Field FieldId, int Column, int Role) const
 
         case MapLocationStateField:
             return MapLocationState();
+
+        case CampaignProgressStateField:
+            return ProgressCampaignStateBytes();
+
+        case PotentialCampaignSideFlagField:
+            return PotentialCampaignSideFlag();
+
+        case PotentialProfileLossCountField:
+            return PotentialProfileLossCount();
+
+        case PotentialFooterLossCountField:
+            return PotentialFooterLossCount();
+
+        case PotentialFooterDuelCountField:
+            return PotentialFooterDuelCount();
 
         default:
             return QVariant();
@@ -803,6 +828,50 @@ QString DORInfoTabModel::MapLocationState() const
 
     const uint16_t Value = DORProgressInfo_GetMapLocationState(&Info);
     return HexValue(Value, 4);
+}
+
+QString DORInfoTabModel::ProgressCampaignStateBytes() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    const uint8_t* Bytes = nullptr;
+    size_t ByteCount = 0;
+    if(DORProgressInfo_GetCampaignStateBytes(&Info, &Bytes, &ByteCount) != DORStatusOk) { return QString(); }
+
+    return BytesToHex(Bytes, ByteCount);
+}
+
+QString DORInfoTabModel::PotentialCampaignSideFlag() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return ByteCountValue(DORProgressInfo_GetPotentialCampaignSideFlag(&Info));
+}
+
+QString DORInfoTabModel::PotentialProfileLossCount() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return ByteCountValue(DORProgressInfo_GetPotentialProfileLossCount(&Info));
+}
+
+QString DORInfoTabModel::PotentialFooterLossCount() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return ByteCountValue(DORProgressInfo_GetPotentialFooterLossCount(&Info));
+}
+
+QString DORInfoTabModel::PotentialFooterDuelCount() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return ByteCountValue(DORProgressInfo_GetPotentialFooterDuelCount(&Info));
 }
 
 QString DORInfoTabModel::RawMapLocationStateBytes() const

@@ -80,6 +80,11 @@ private:
         ProfileProgressStateField,
         FooterProgressStateField,
         MapLocationStateField,
+        CampaignProgressStateField,
+        PotentialCampaignSideFlagField,
+        PotentialProfileLossCountField,
+        PotentialFooterLossCountField,
+        PotentialFooterDuelCountField,
 
         FieldCount
     };
@@ -138,6 +143,11 @@ private:
     QString ProgressProfileStateBytes() const;
     QString ProgressFooterStateBytes() const;
     QString MapLocationState() const;
+    QString ProgressCampaignStateBytes() const;
+    QString PotentialCampaignSideFlag() const;
+    QString PotentialProfileLossCount() const;
+    QString PotentialFooterLossCount() const;
+    QString PotentialFooterDuelCount() const;
     QString RawMapLocationStateBytes() const;
 
     CollectionSummary BuildCollectionSummary() const;
