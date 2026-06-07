@@ -19,6 +19,64 @@ QString HexValue(qulonglong Value, int Width = 0)
     if(Width > 0) { Hex = Hex.rightJustified(Width, QChar('0')); }
     return QStringLiteral("0x%1").arg(Hex);
 }
+
+bool ParseU16Value(const QVariant& Value, uint16_t* pOutValue)
+{
+    if(pOutValue == nullptr) { return false; }
+
+    if(Value.canConvert<qulonglong>())
+    {
+        bool bOk = false;
+        const qulonglong NumericValue = Value.toULongLong(&bOk);
+        if(bOk && NumericValue <= 0xFFFFu)
+        {
+            *pOutValue = static_cast<uint16_t>(NumericValue);
+            return true;
+        }
+    }
+
+    QString Text = Value.toString().trimmed();
+    if(Text.isEmpty()) { return false; }
+
+    const QStringList ByteTokens = Text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if(ByteTokens.size() == 2)
+    {
+        uint Bytes[2] = {};
+        for(int Index = 0; Index < 2; ++Index)
+        {
+            QString ByteText = ByteTokens[Index];
+            if(ByteText.startsWith(QStringLiteral("0x"), Qt::CaseInsensitive))
+            {
+                ByteText = ByteText.mid(2);
+            }
+
+            bool bByteOk = false;
+            Bytes[Index] = ByteText.toUInt(&bByteOk, 16);
+            if(!bByteOk || Bytes[Index] > 0xFFu) { return false; }
+        }
+
+        *pOutValue = static_cast<uint16_t>(Bytes[0] | (Bytes[1] << 8u));
+        return true;
+    }
+
+    int Base = 10;
+    if(Text.startsWith(QStringLiteral("0x"), Qt::CaseInsensitive))
+    {
+        Text = Text.mid(2);
+        Base = 16;
+    }
+
+    bool bOk = false;
+    uint NumericValue = Text.toUInt(&bOk, Base);
+    if(!bOk && Base == 10)
+    {
+        NumericValue = Text.toUInt(&bOk, 16);
+    }
+    if(!bOk || NumericValue > 0xFFFFu) { return false; }
+
+    *pOutValue = static_cast<uint16_t>(NumericValue);
+    return true;
+}
 }
 
 DORInfoTabModel::DORInfoTabModel(QObject *parent)
@@ -511,7 +569,26 @@ QVariant DORInfoTabModel::DetailData(Detail DetailId, int Column, int Role) cons
 
 bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Role)
 {
-    if(Role != Qt::EditRole || FieldId != PlayerNameField || Save == nullptr) { return false; }
+    if(Role != Qt::EditRole || Save == nullptr) { return false; }
+
+    if(FieldId == MapLocationStateField)
+    {
+        uint16_t NewValue = 0;
+        if(!ParseU16Value(Value, &NewValue)) { return false; }
+        if(DORSave_SetMapLocationState(Save, NewValue) != DORStatusOk) { return false; }
+
+        const QModelIndex MapLocationStateIndex = IndexForField(MapLocationStateField, ValueColumn);
+        const QModelIndex RawMapLocationStateBytesIndex = index(0, ValueColumn, IndexForField(MapLocationStateField, 0));
+        const QModelIndex FooterProgressStateIndex = IndexForField(FooterProgressStateField, ValueColumn);
+        const QModelIndex ChecksumIndex = IndexForField(ChecksumField, ValueColumn);
+        emit dataChanged(MapLocationStateIndex, MapLocationStateIndex, { Qt::DisplayRole, Qt::EditRole });
+        emit dataChanged(RawMapLocationStateBytesIndex, RawMapLocationStateBytesIndex, { Qt::DisplayRole });
+        emit dataChanged(FooterProgressStateIndex, FooterProgressStateIndex, { Qt::DisplayRole });
+        emit dataChanged(ChecksumIndex, ChecksumIndex, { Qt::DisplayRole });
+        return true;
+    }
+
+    if(FieldId != PlayerNameField) { return false; }
 
     const QString NewName = Value.toString();
     // if(NewName == PlayerName()) { return true; }
@@ -530,7 +607,7 @@ bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Rol
 
 Qt::ItemFlags DORInfoTabModel::FieldFlags(Field FieldId, int Column) const
 {
-    if(FieldId == PlayerNameField && Column == ValueColumn && Save != nullptr)
+    if((FieldId == PlayerNameField || FieldId == MapLocationStateField) && Column == ValueColumn && Save != nullptr)
     {
         return Qt::ItemIsEditable;
     }
