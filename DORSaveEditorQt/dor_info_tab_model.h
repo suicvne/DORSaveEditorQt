@@ -47,6 +47,7 @@ private:
         FileGroup,
         CollectionGroup,
         DeckGroup,
+        ProgressGroup,
         GroupCount
     };
 
@@ -75,11 +76,18 @@ private:
         DeckBField,
         DeckCField,
 
+        RecentCardsField,
+        ProfileProgressStateField,
+        FooterProgressStateField,
+        MapLocationStateField,
+
         FieldCount
     };
 
     enum Detail {
         RawPlayerNameBytesDetail,
+        RawRecentCardsBytesDetail,
+        RawMapLocationStateBytesDetail,
         DetailCount
     };
 
@@ -125,8 +133,15 @@ private:
     QString GameDataEntrySize() const;
     QVariant CollectionField(Field FieldId) const;
     QString DeckSummary(uint DeckIndex) const;
+    QString RecentCards() const;
+    QString RawRecentCardsBytes() const;
+    QString ProgressProfileStateBytes() const;
+    QString ProgressFooterStateBytes() const;
+    QString MapLocationState() const;
+    QString RawMapLocationStateBytes() const;
 
     CollectionSummary BuildCollectionSummary() const;
+    bool GetProgressInfo(DORProgressInfo* pOutInfo) const;
     bool GetGameDataEntry(PSUEntryInfo* pOutEntry) const;
 
     DORSave* Save = nullptr;

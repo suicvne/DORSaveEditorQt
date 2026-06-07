@@ -1,5 +1,26 @@
 #include "dor_info_tab_model.h"
 
+namespace
+{
+QString BytesToHex(const uint8_t* Bytes, size_t ByteCount)
+{
+    QString Result;
+    for(size_t ByteIndex = 0; ByteIndex < ByteCount; ++ByteIndex)
+    {
+        if(ByteIndex > 0) { Result.append(QLatin1Char(' ')); }
+        Result.append(QStringLiteral("%1").arg(Bytes[ByteIndex], 2, 16, QChar('0')).toUpper());
+    }
+    return Result;
+}
+
+QString HexValue(qulonglong Value, int Width = 0)
+{
+    QString Hex = QString::number(Value, 16).toUpper();
+    if(Width > 0) { Hex = Hex.rightJustified(Width, QChar('0')); }
+    return QStringLiteral("0x%1").arg(Hex);
+}
+}
+
 DORInfoTabModel::DORInfoTabModel(QObject *parent)
     : QAbstractItemModel{parent}
 {}
@@ -51,8 +72,22 @@ QModelIndex DORInfoTabModel::index(int row, int column, const QModelIndex& paren
     if(NodeType(parent) == FieldNode)
     {
         const Field FieldId = static_cast<Field>(NodeValue(parent));
-        if(FieldId != PlayerNameField || row != 0) { return QModelIndex(); }
-        return createIndex(row, column, MakeDetailNodeId(RawPlayerNameBytesDetail));
+        if(row != 0) { return QModelIndex(); }
+
+        switch(FieldId)
+        {
+            case PlayerNameField:
+                return createIndex(row, column, MakeDetailNodeId(RawPlayerNameBytesDetail));
+
+            case RecentCardsField:
+                return createIndex(row, column, MakeDetailNodeId(RawRecentCardsBytesDetail));
+
+            case MapLocationStateField:
+                return createIndex(row, column, MakeDetailNodeId(RawMapLocationStateBytesDetail));
+
+            default:
+                return QModelIndex();
+        }
     }
 
     if(NodeType(parent) != GroupNode) { return QModelIndex(); }
@@ -81,11 +116,20 @@ QModelIndex DORInfoTabModel::parent(const QModelIndex& child) const
         }
 
         case DetailNode:
-            if(static_cast<Detail>(NodeValue(child)) == RawPlayerNameBytesDetail)
+            switch(static_cast<Detail>(NodeValue(child)))
             {
-                return IndexForField(PlayerNameField, 0);
+                case RawPlayerNameBytesDetail:
+                    return IndexForField(PlayerNameField, 0);
+
+                case RawRecentCardsBytesDetail:
+                    return IndexForField(RecentCardsField, 0);
+
+                case RawMapLocationStateBytesDetail:
+                    return IndexForField(MapLocationStateField, 0);
+
+                default:
+                    return QModelIndex();
             }
-            return QModelIndex();
 
         default:
             return QModelIndex();
@@ -103,9 +147,18 @@ int DORInfoTabModel::rowCount(const QModelIndex& parent) const
         return FieldCountForGroup(static_cast<Group>(NodeValue(parent)));
     }
 
-    if(NodeType(parent) == FieldNode && static_cast<Field>(NodeValue(parent)) == PlayerNameField)
+    if(NodeType(parent) == FieldNode)
     {
-        return 1;
+        switch(static_cast<Field>(NodeValue(parent)))
+        {
+            case PlayerNameField:
+            case RecentCardsField:
+            case MapLocationStateField:
+                return 1;
+
+            default:
+                return 0;
+        }
     }
 
     return 0;
@@ -218,6 +271,9 @@ QString DORInfoTabModel::GroupName(Group GroupId)
         case DeckGroup:
             return QStringLiteral("Deck Summary");
 
+        case ProgressGroup:
+            return QStringLiteral("Career Progression");
+
         default:
             return QStringLiteral("Unknown");
     }
@@ -249,6 +305,11 @@ const DORInfoTabModel::FieldDefinition* DORInfoTabModel::FieldDefinitions(size_t
         { DeckAField, DeckGroup, "Deck A" },
         { DeckBField, DeckGroup, "Deck B" },
         { DeckCField, DeckGroup, "Deck C" },
+
+        { RecentCardsField, ProgressGroup, "Recent Cards" },
+        { ProfileProgressStateField, ProgressGroup, "Profile State Bytes" },
+        { FooterProgressStateField, ProgressGroup, "Footer State Bytes" },
+        { MapLocationStateField, ProgressGroup, "Map Location State" },
     };
 
     if(pOutCount != nullptr) { *pOutCount = sizeof(Definitions) / sizeof(Definitions[0]); }
@@ -405,6 +466,18 @@ QVariant DORInfoTabModel::FieldData(Field FieldId, int Column, int Role) const
         case DeckCField:
             return DeckSummary(2);
 
+        case RecentCardsField:
+            return RecentCards();
+
+        case ProfileProgressStateField:
+            return ProgressProfileStateBytes();
+
+        case FooterProgressStateField:
+            return ProgressFooterStateBytes();
+
+        case MapLocationStateField:
+            return MapLocationState();
+
         default:
             return QVariant();
     }
@@ -419,6 +492,16 @@ QVariant DORInfoTabModel::DetailData(Detail DetailId, int Column, int Role) cons
         case RawPlayerNameBytesDetail:
             if(Column == NameColumn) { return Role == Qt::DisplayRole ? QStringLiteral("Raw Bytes") : QVariant(); }
             if(Column == ValueColumn) { return RawPlayerNameBytes(); }
+            return QVariant();
+
+        case RawRecentCardsBytesDetail:
+            if(Column == NameColumn) { return Role == Qt::DisplayRole ? QStringLiteral("Raw Bytes") : QVariant(); }
+            if(Column == ValueColumn) { return RawRecentCardsBytes(); }
+            return QVariant();
+
+        case RawMapLocationStateBytesDetail:
+            if(Column == NameColumn) { return Role == Qt::DisplayRole ? QStringLiteral("Raw Bytes") : QVariant(); }
+            if(Column == ValueColumn) { return RawMapLocationStateBytes(); }
             return QVariant();
 
         default:
@@ -473,22 +556,14 @@ QString DORInfoTabModel::RawPlayerNameBytes() const
     size_t ByteCount = 0;
     if(DORSave_GetRawPlayerNameBytes(Save, &Bytes, &ByteCount) != DORStatusOk) { return QString(); }
 
-    QString Result;
-    for(size_t ByteIndex = 0; ByteIndex < ByteCount; ++ByteIndex)
-    {
-        if(ByteIndex > 0) { Result.append(QLatin1Char(' ')); }
-        Result.append(QStringLiteral("%1").arg(Bytes[ByteIndex], 2, 16, QChar('0')).toUpper());
-    }
-
-    return Result;
+    return BytesToHex(Bytes, ByteCount);
 }
 
 QString DORInfoTabModel::Checksum() const
 {
     if(Save == nullptr) { return QString(); }
 
-    const QString Value = QString::number(DORSave_GetChecksum(Save), 16).toUpper().rightJustified(4, QChar('0'));
-    return QStringLiteral("0x%1").arg(Value);
+    return HexValue(DORSave_GetChecksum(Save), 4);
 }
 
 QString DORInfoTabModel::ProfileToken() const
@@ -499,14 +574,7 @@ QString DORInfoTabModel::ProfileToken() const
     size_t ByteCount = 0;
     if(DORSave_GetProfileTokenBytes(Save, &Bytes, &ByteCount) != DORStatusOk) { return QString(); }
 
-    QString Result;
-    for(size_t ByteIndex = 0; ByteIndex < ByteCount; ++ByteIndex)
-    {
-        if(ByteIndex > 0) { Result.append(QLatin1Char(' ')); }
-        Result.append(QStringLiteral("%1").arg(Bytes[ByteIndex], 2, 16, QChar('0')).toUpper());
-    }
-
-    return Result;
+    return BytesToHex(Bytes, ByteCount);
 }
 
 QString DORInfoTabModel::SaveEntryName() const
@@ -522,8 +590,7 @@ QString DORInfoTabModel::GameDataEntryOffset() const
     PSUEntryInfo Entry = {};
     if(!GetGameDataEntry(&Entry)) { return QString(); }
 
-    const QString Value = QString::number(Entry.PayloadOffset, 16).toUpper();
-    return QStringLiteral("0x%1").arg(Value);
+    return HexValue(Entry.PayloadOffset);
 }
 
 QString DORInfoTabModel::GameDataEntrySize() const
@@ -592,6 +659,83 @@ QString DORInfoTabModel::DeckSummary(uint DeckIndex) const
         .arg(Info.StoredDeckCost);
 }
 
+QString DORInfoTabModel::RecentCards() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    const uint16_t* CardIds = nullptr;
+    size_t CardCount = 0;
+    if(DORProgressInfo_GetRecentCards(&Info, &CardIds, &CardCount) != DORStatusOk) { return QString(); }
+
+    QStringList Cards;
+    for(size_t Index = 0; Index < CardCount; ++Index)
+    {
+        const uint16_t CardId = CardIds[Index];
+        if(CardId == DOREmptyCardId) { continue; }
+
+        const char* Name = DORCard_GetName(CardId);
+        Cards.append(QStringLiteral("%1 - %2")
+            .arg(CardId, 3, 10, QChar('0'))
+            .arg(Name == nullptr ? "Unknown" : Name));
+    }
+
+    return Cards.isEmpty() ? QStringLiteral("None") : Cards.join(QStringLiteral(", "));
+}
+
+QString DORInfoTabModel::RawRecentCardsBytes() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    const uint16_t* CardIds = nullptr;
+    size_t CardCount = 0;
+    if(DORProgressInfo_GetRecentCards(&Info, &CardIds, &CardCount) != DORStatusOk) { return QString(); }
+
+    uint8_t Bytes[DORProgressRecentCardCount * 2u] = {};
+    for(size_t Index = 0; Index < CardCount; ++Index)
+    {
+        const uint16_t CardId = CardIds[Index];
+        Bytes[Index * 2u] = static_cast<uint8_t>(CardId & 0xFFu);
+        Bytes[Index * 2u + 1u] = static_cast<uint8_t>((CardId >> 8u) & 0xFFu);
+    }
+
+    return BytesToHex(Bytes, sizeof(Bytes));
+}
+
+QString DORInfoTabModel::ProgressProfileStateBytes() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return BytesToHex(Info.ProfileStateBytes, DORProgressProfileStateByteCount);
+}
+
+QString DORInfoTabModel::ProgressFooterStateBytes() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return BytesToHex(Info.FooterStateBytes, DORProgressFooterStateByteCount);
+}
+
+QString DORInfoTabModel::MapLocationState() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    const uint16_t Value = DORProgressInfo_GetMapLocationState(&Info);
+    return HexValue(Value, 4);
+}
+
+QString DORInfoTabModel::RawMapLocationStateBytes() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return BytesToHex(Info.FooterStateBytes, 2u);
+}
+
 DORInfoTabModel::CollectionSummary DORInfoTabModel::BuildCollectionSummary() const
 {
     CollectionSummary Summary;
@@ -612,6 +756,13 @@ DORInfoTabModel::CollectionSummary DORInfoTabModel::BuildCollectionSummary() con
     }
 
     return Summary;
+}
+
+bool DORInfoTabModel::GetProgressInfo(DORProgressInfo* pOutInfo) const
+{
+    if(Save == nullptr || pOutInfo == nullptr) { return false; }
+
+    return DORSave_GetProgressInfo(Save, pOutInfo) == DORStatusOk;
 }
 
 bool DORInfoTabModel::GetGameDataEntry(PSUEntryInfo* pOutEntry) const
