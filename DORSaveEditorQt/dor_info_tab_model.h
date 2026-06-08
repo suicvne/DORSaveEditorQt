@@ -84,7 +84,7 @@ private:
         PotentialCampaignSideFlagField,
         PotentialProfileLossCountField,
         PotentialFooterLossCountField,
-        PotentialFooterDuelCountField,
+        PotentialProfileDuelCountField,
 
         FieldCount
     };
@@ -147,7 +147,7 @@ private:
     QString PotentialCampaignSideFlag() const;
     QString PotentialProfileLossCount() const;
     QString PotentialFooterLossCount() const;
-    QString PotentialFooterDuelCount() const;
+    QString PotentialProfileDuelCount() const;
     QString RawMapLocationStateBytes() const;
 
     CollectionSummary BuildCollectionSummary() const;

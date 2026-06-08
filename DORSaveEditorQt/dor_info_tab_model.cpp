@@ -1,5 +1,7 @@
 #include "dor_info_tab_model.h"
 
+#include <limits>
+
 namespace
 {
 QString BytesToHex(const uint8_t* Bytes, size_t ByteCount)
@@ -25,17 +27,20 @@ QString ByteCountValue(uint8_t Value)
     return QStringLiteral("%1 (%2)").arg(Value).arg(HexValue(Value, 2));
 }
 
-bool ParseU16Value(const QVariant& Value, uint16_t* pOutValue)
+template<typename UInt>
+bool ParseUnsignedValue(const QVariant& Value, UInt* pOutValue)
 {
     if(pOutValue == nullptr) { return false; }
+
+    constexpr qulonglong MaxValue = std::numeric_limits<UInt>::max();
 
     if(Value.canConvert<qulonglong>())
     {
         bool bOk = false;
         const qulonglong NumericValue = Value.toULongLong(&bOk);
-        if(bOk && NumericValue <= 0xFFFFu)
+        if(bOk && NumericValue <= MaxValue)
         {
-            *pOutValue = static_cast<uint16_t>(NumericValue);
+            *pOutValue = static_cast<UInt>(NumericValue);
             return true;
         }
     }
@@ -43,11 +48,18 @@ bool ParseU16Value(const QVariant& Value, uint16_t* pOutValue)
     QString Text = Value.toString().trimmed();
     if(Text.isEmpty()) { return false; }
 
-    const QStringList ByteTokens = Text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-    if(ByteTokens.size() == 2)
+    const int ParenIndex = Text.indexOf(QLatin1Char('('));
+    if(ParenIndex >= 0)
     {
-        uint Bytes[2] = {};
-        for(int Index = 0; Index < 2; ++Index)
+        Text = Text.left(ParenIndex).trimmed();
+        if(Text.isEmpty()) { return false; }
+    }
+
+    const QStringList ByteTokens = Text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if(ByteTokens.size() == static_cast<int>(sizeof(UInt)))
+    {
+        qulonglong NumericValue = 0;
+        for(int Index = 0; Index < ByteTokens.size(); ++Index)
         {
             QString ByteText = ByteTokens[Index];
             if(ByteText.startsWith(QStringLiteral("0x"), Qt::CaseInsensitive))
@@ -56,11 +68,12 @@ bool ParseU16Value(const QVariant& Value, uint16_t* pOutValue)
             }
 
             bool bByteOk = false;
-            Bytes[Index] = ByteText.toUInt(&bByteOk, 16);
-            if(!bByteOk || Bytes[Index] > 0xFFu) { return false; }
+            const uint ByteValue = ByteText.toUInt(&bByteOk, 16);
+            if(!bByteOk || ByteValue > 0xFFu) { return false; }
+            NumericValue |= static_cast<qulonglong>(ByteValue) << (static_cast<uint>(Index) * 8u);
         }
 
-        *pOutValue = static_cast<uint16_t>(Bytes[0] | (Bytes[1] << 8u));
+        *pOutValue = static_cast<UInt>(NumericValue);
         return true;
     }
 
@@ -72,14 +85,14 @@ bool ParseU16Value(const QVariant& Value, uint16_t* pOutValue)
     }
 
     bool bOk = false;
-    uint NumericValue = Text.toUInt(&bOk, Base);
+    qulonglong NumericValue = Text.toULongLong(&bOk, Base);
     if(!bOk && Base == 10)
     {
-        NumericValue = Text.toUInt(&bOk, 16);
+        NumericValue = Text.toULongLong(&bOk, 16);
     }
-    if(!bOk || NumericValue > 0xFFFFu) { return false; }
+    if(!bOk || NumericValue > MaxValue) { return false; }
 
-    *pOutValue = static_cast<uint16_t>(NumericValue);
+    *pOutValue = static_cast<UInt>(NumericValue);
     return true;
 }
 }
@@ -377,7 +390,7 @@ const DORInfoTabModel::FieldDefinition* DORInfoTabModel::FieldDefinitions(size_t
         { PotentialCampaignSideFlagField, ProgressGroup, "Potential Campaign Side Flag" },
         { PotentialProfileLossCountField, ProgressGroup, "Potential Profile Loss Count" },
         { PotentialFooterLossCountField, ProgressGroup, "Potential Footer Loss Count" },
-        { PotentialFooterDuelCountField, ProgressGroup, "Potential Footer Duel Count" },
+        { PotentialProfileDuelCountField, ProgressGroup, "Potential Profile Duel Count" },
     };
 
     if(pOutCount != nullptr) { *pOutCount = sizeof(Definitions) / sizeof(Definitions[0]); }
@@ -558,8 +571,8 @@ QVariant DORInfoTabModel::FieldData(Field FieldId, int Column, int Role) const
         case PotentialFooterLossCountField:
             return PotentialFooterLossCount();
 
-        case PotentialFooterDuelCountField:
-            return PotentialFooterDuelCount();
+        case PotentialProfileDuelCountField:
+            return PotentialProfileDuelCount();
 
         default:
             return QVariant();
@@ -596,10 +609,57 @@ bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Rol
 {
     if(Role != Qt::EditRole || Save == nullptr) { return false; }
 
+    if(FieldId == PotentialCampaignSideFlagField ||
+       FieldId == PotentialProfileLossCountField ||
+       FieldId == PotentialProfileDuelCountField)
+    {
+        uint8_t NewValue = 0;
+        if(!ParseUnsignedValue(Value, &NewValue)) { return false; }
+
+        DORStatus Status = DORStatusInvalidArgument;
+        switch(FieldId)
+        {
+            case PotentialCampaignSideFlagField:
+                Status = DORSave_SetPotentialCampaignSideFlag(Save, NewValue);
+                break;
+
+            case PotentialProfileLossCountField:
+                Status = DORSave_SetPotentialProfileLossCount(Save, NewValue);
+                break;
+
+            case PotentialProfileDuelCountField:
+                Status = DORSave_SetPotentialProfileDuelCount(Save, NewValue);
+                break;
+
+            default:
+                break;
+        }
+        if(Status != DORStatusOk) { return false; }
+
+        const QModelIndex EditedIndex = IndexForField(FieldId, ValueColumn);
+        const QModelIndex CampaignProgressStateIndex = IndexForField(CampaignProgressStateField, ValueColumn);
+        const QModelIndex ChecksumIndex = IndexForField(ChecksumField, ValueColumn);
+        emit dataChanged(EditedIndex, EditedIndex, { Qt::DisplayRole, Qt::EditRole });
+        emit dataChanged(CampaignProgressStateIndex, CampaignProgressStateIndex, { Qt::DisplayRole });
+        emit dataChanged(ChecksumIndex, ChecksumIndex, { Qt::DisplayRole });
+
+        if(FieldId == PotentialCampaignSideFlagField)
+        {
+            const QModelIndex ProfileProgressStateIndex = IndexForField(ProfileProgressStateField, ValueColumn);
+            emit dataChanged(ProfileProgressStateIndex, ProfileProgressStateIndex, { Qt::DisplayRole });
+        }
+        if(FieldId == PotentialProfileDuelCountField)
+        {
+            const QModelIndex FooterProgressStateIndex = IndexForField(FooterProgressStateField, ValueColumn);
+            emit dataChanged(FooterProgressStateIndex, FooterProgressStateIndex, { Qt::DisplayRole });
+        }
+        return true;
+    }
+
     if(FieldId == MapLocationStateField)
     {
         uint16_t NewValue = 0;
-        if(!ParseU16Value(Value, &NewValue)) { return false; }
+        if(!ParseUnsignedValue(Value, &NewValue)) { return false; }
         if(DORSave_SetMapLocationState(Save, NewValue) != DORStatusOk) { return false; }
 
         const QModelIndex MapLocationStateIndex = IndexForField(MapLocationStateField, ValueColumn);
@@ -632,7 +692,12 @@ bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Rol
 
 Qt::ItemFlags DORInfoTabModel::FieldFlags(Field FieldId, int Column) const
 {
-    if((FieldId == PlayerNameField || FieldId == MapLocationStateField) && Column == ValueColumn && Save != nullptr)
+    if(Column == ValueColumn && Save != nullptr &&
+       (FieldId == PlayerNameField ||
+        FieldId == MapLocationStateField ||
+        FieldId == PotentialCampaignSideFlagField ||
+        FieldId == PotentialProfileLossCountField ||
+        FieldId == PotentialProfileDuelCountField))
     {
         return Qt::ItemIsEditable;
     }
@@ -866,12 +931,12 @@ QString DORInfoTabModel::PotentialFooterLossCount() const
     return ByteCountValue(DORProgressInfo_GetPotentialFooterLossCount(&Info));
 }
 
-QString DORInfoTabModel::PotentialFooterDuelCount() const
+QString DORInfoTabModel::PotentialProfileDuelCount() const
 {
     DORProgressInfo Info = {};
     if(!GetProgressInfo(&Info)) { return QString(); }
 
-    return ByteCountValue(DORProgressInfo_GetPotentialFooterDuelCount(&Info));
+    return ByteCountValue(DORProgressInfo_GetPotentialProfileDuelCount(&Info));
 }
 
 QString DORInfoTabModel::RawMapLocationStateBytes() const
