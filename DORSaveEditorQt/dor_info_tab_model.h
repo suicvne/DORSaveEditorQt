@@ -79,9 +79,10 @@ private:
         RecentCardsField,
         ProfileProgressStateField,
         FooterProgressStateField,
-        MapLocationStateField,
+        UnconfirmedFooterWordField,
         CampaignProgressStateField,
-        PotentialCampaignSideFlagField,
+        CampaignSideByteField,
+        RoseProgressionStateByteField,
         PotentialProfileLossCountField,
         PotentialFooterLossCountField,
         PotentialProfileDuelCountField,
@@ -92,7 +93,7 @@ private:
     enum Detail {
         RawPlayerNameBytesDetail,
         RawRecentCardsBytesDetail,
-        RawMapLocationStateBytesDetail,
+        RawUnconfirmedFooterWordBytesDetail,
         DetailCount
     };
 
@@ -142,13 +143,14 @@ private:
     QString RawRecentCardsBytes() const;
     QString ProgressProfileStateBytes() const;
     QString ProgressFooterStateBytes() const;
-    QString MapLocationState() const;
+    QString UnconfirmedFooterWord() const;
     QString ProgressCampaignStateBytes() const;
-    QString PotentialCampaignSideFlag() const;
+    QString CampaignSideByte() const;
+    QString RoseProgressionStateByte() const;
     QString PotentialProfileLossCount() const;
     QString PotentialFooterLossCount() const;
     QString PotentialProfileDuelCount() const;
-    QString RawMapLocationStateBytes() const;
+    QString RawUnconfirmedFooterWordBytes() const;
 
     CollectionSummary BuildCollectionSummary() const;
     bool GetProgressInfo(DORProgressInfo* pOutInfo) const;

@@ -95,6 +95,33 @@ bool ParseUnsignedValue(const QVariant& Value, UInt* pOutValue)
     *pOutValue = static_cast<UInt>(NumericValue);
     return true;
 }
+
+bool ParseHexBytes(const QVariant& Value, uint8_t* pOutBytes, size_t ByteCount)
+{
+    if(pOutBytes == nullptr) { return false; }
+
+    const QString Text = Value.toString().trimmed();
+    if(Text.isEmpty()) { return false; }
+
+    const QStringList ByteTokens = Text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if(ByteTokens.size() != static_cast<int>(ByteCount)) { return false; }
+
+    for(int Index = 0; Index < ByteTokens.size(); ++Index)
+    {
+        QString ByteText = ByteTokens[Index];
+        if(ByteText.startsWith(QStringLiteral("0x"), Qt::CaseInsensitive))
+        {
+            ByteText = ByteText.mid(2);
+        }
+
+        bool bOk = false;
+        const uint ByteValue = ByteText.toUInt(&bOk, 16);
+        if(!bOk || ByteValue > 0xFFu) { return false; }
+        pOutBytes[Index] = static_cast<uint8_t>(ByteValue);
+    }
+
+    return true;
+}
 }
 
 DORInfoTabModel::DORInfoTabModel(QObject *parent)
@@ -158,8 +185,8 @@ QModelIndex DORInfoTabModel::index(int row, int column, const QModelIndex& paren
             case RecentCardsField:
                 return createIndex(row, column, MakeDetailNodeId(RawRecentCardsBytesDetail));
 
-            case MapLocationStateField:
-                return createIndex(row, column, MakeDetailNodeId(RawMapLocationStateBytesDetail));
+            case UnconfirmedFooterWordField:
+                return createIndex(row, column, MakeDetailNodeId(RawUnconfirmedFooterWordBytesDetail));
 
             default:
                 return QModelIndex();
@@ -200,8 +227,8 @@ QModelIndex DORInfoTabModel::parent(const QModelIndex& child) const
                 case RawRecentCardsBytesDetail:
                     return IndexForField(RecentCardsField, 0);
 
-                case RawMapLocationStateBytesDetail:
-                    return IndexForField(MapLocationStateField, 0);
+                case RawUnconfirmedFooterWordBytesDetail:
+                    return IndexForField(UnconfirmedFooterWordField, 0);
 
                 default:
                     return QModelIndex();
@@ -229,7 +256,7 @@ int DORInfoTabModel::rowCount(const QModelIndex& parent) const
         {
             case PlayerNameField:
             case RecentCardsField:
-            case MapLocationStateField:
+            case UnconfirmedFooterWordField:
                 return 1;
 
             default:
@@ -385,9 +412,10 @@ const DORInfoTabModel::FieldDefinition* DORInfoTabModel::FieldDefinitions(size_t
         { RecentCardsField, ProgressGroup, "Recent Cards" },
         { ProfileProgressStateField, ProgressGroup, "Profile State Bytes" },
         { FooterProgressStateField, ProgressGroup, "Footer State Bytes" },
-        { MapLocationStateField, ProgressGroup, "Map Location State" },
+        { UnconfirmedFooterWordField, ProgressGroup, "Unconfirmed Footer Word" },
         { CampaignProgressStateField, ProgressGroup, "Campaign State Bytes (Provisional)" },
-        { PotentialCampaignSideFlagField, ProgressGroup, "Potential Campaign Side Flag" },
+        { CampaignSideByteField, ProgressGroup, "Campaign Side Byte" },
+        { RoseProgressionStateByteField, ProgressGroup, "Rose/Progression State Byte" },
         { PotentialProfileLossCountField, ProgressGroup, "Potential Profile Loss Count" },
         { PotentialFooterLossCountField, ProgressGroup, "Potential Footer Loss Count" },
         { PotentialProfileDuelCountField, ProgressGroup, "Potential Profile Duel Count" },
@@ -556,14 +584,17 @@ QVariant DORInfoTabModel::FieldData(Field FieldId, int Column, int Role) const
         case FooterProgressStateField:
             return ProgressFooterStateBytes();
 
-        case MapLocationStateField:
-            return MapLocationState();
+        case UnconfirmedFooterWordField:
+            return UnconfirmedFooterWord();
 
         case CampaignProgressStateField:
             return ProgressCampaignStateBytes();
 
-        case PotentialCampaignSideFlagField:
-            return PotentialCampaignSideFlag();
+        case CampaignSideByteField:
+            return CampaignSideByte();
+
+        case RoseProgressionStateByteField:
+            return RoseProgressionStateByte();
 
         case PotentialProfileLossCountField:
             return PotentialProfileLossCount();
@@ -595,9 +626,9 @@ QVariant DORInfoTabModel::DetailData(Detail DetailId, int Column, int Role) cons
             if(Column == ValueColumn) { return RawRecentCardsBytes(); }
             return QVariant();
 
-        case RawMapLocationStateBytesDetail:
+        case RawUnconfirmedFooterWordBytesDetail:
             if(Column == NameColumn) { return Role == Qt::DisplayRole ? QStringLiteral("Raw Bytes") : QVariant(); }
-            if(Column == ValueColumn) { return RawMapLocationStateBytes(); }
+            if(Column == ValueColumn) { return RawUnconfirmedFooterWordBytes(); }
             return QVariant();
 
         default:
@@ -609,7 +640,8 @@ bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Rol
 {
     if(Role != Qt::EditRole || Save == nullptr) { return false; }
 
-    if(FieldId == PotentialCampaignSideFlagField ||
+    if(FieldId == CampaignSideByteField ||
+       FieldId == RoseProgressionStateByteField ||
        FieldId == PotentialProfileLossCountField ||
        FieldId == PotentialProfileDuelCountField)
     {
@@ -619,8 +651,12 @@ bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Rol
         DORStatus Status = DORStatusInvalidArgument;
         switch(FieldId)
         {
-            case PotentialCampaignSideFlagField:
-                Status = DORSave_SetPotentialCampaignSideFlag(Save, NewValue);
+            case CampaignSideByteField:
+                Status = DORSave_SetCampaignSideByte(Save, NewValue);
+                break;
+
+            case RoseProgressionStateByteField:
+                Status = DORSave_SetRoseProgressionStateByte(Save, NewValue);
                 break;
 
             case PotentialProfileLossCountField:
@@ -643,7 +679,7 @@ bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Rol
         emit dataChanged(CampaignProgressStateIndex, CampaignProgressStateIndex, { Qt::DisplayRole });
         emit dataChanged(ChecksumIndex, ChecksumIndex, { Qt::DisplayRole });
 
-        if(FieldId == PotentialCampaignSideFlagField)
+        if(FieldId == CampaignSideByteField || FieldId == RoseProgressionStateByteField)
         {
             const QModelIndex ProfileProgressStateIndex = IndexForField(ProfileProgressStateField, ValueColumn);
             emit dataChanged(ProfileProgressStateIndex, ProfileProgressStateIndex, { Qt::DisplayRole });
@@ -656,19 +692,73 @@ bool DORInfoTabModel::SetFieldData(Field FieldId, const QVariant& Value, int Rol
         return true;
     }
 
-    if(FieldId == MapLocationStateField)
+    if(FieldId == FooterProgressStateField)
+    {
+        uint8_t NewBytes[DORProgressFooterStateByteCount] = {};
+        if(!ParseHexBytes(Value, NewBytes, DORProgressFooterStateByteCount)) { return false; }
+        if(DORSave_SetProgressFooterStateBytes(Save, NewBytes, DORProgressFooterStateByteCount) != DORStatusOk) { return false; }
+
+        const QModelIndex FooterProgressStateIndex = IndexForField(FooterProgressStateField, ValueColumn);
+        const QModelIndex UnconfirmedFooterWordIndex = IndexForField(UnconfirmedFooterWordField, ValueColumn);
+        const QModelIndex RawUnconfirmedFooterWordBytesIndex = index(0, ValueColumn, IndexForField(UnconfirmedFooterWordField, 0));
+        const QModelIndex CampaignProgressStateIndex = IndexForField(CampaignProgressStateField, ValueColumn);
+        const QModelIndex PotentialProfileDuelCountIndex = IndexForField(PotentialProfileDuelCountField, ValueColumn);
+        const QModelIndex ChecksumIndex = IndexForField(ChecksumField, ValueColumn);
+        emit dataChanged(FooterProgressStateIndex, FooterProgressStateIndex, { Qt::DisplayRole, Qt::EditRole });
+        emit dataChanged(UnconfirmedFooterWordIndex, UnconfirmedFooterWordIndex, { Qt::DisplayRole });
+        emit dataChanged(RawUnconfirmedFooterWordBytesIndex, RawUnconfirmedFooterWordBytesIndex, { Qt::DisplayRole });
+        emit dataChanged(CampaignProgressStateIndex, CampaignProgressStateIndex, { Qt::DisplayRole });
+        emit dataChanged(PotentialProfileDuelCountIndex, PotentialProfileDuelCountIndex, { Qt::DisplayRole });
+        emit dataChanged(ChecksumIndex, ChecksumIndex, { Qt::DisplayRole });
+        return true;
+    }
+
+    if(FieldId == CampaignProgressStateField)
+    {
+        uint8_t NewBytes[DORProgressCampaignStateByteCount] = {};
+        if(!ParseHexBytes(Value, NewBytes, DORProgressCampaignStateByteCount)) { return false; }
+        if(DORSave_SetProgressCampaignStateBytes(Save, NewBytes, DORProgressCampaignStateByteCount) != DORStatusOk) { return false; }
+
+        const QModelIndex CampaignProgressStateIndex = IndexForField(CampaignProgressStateField, ValueColumn);
+        const QModelIndex ProfileProgressStateIndex = IndexForField(ProfileProgressStateField, ValueColumn);
+        const QModelIndex FooterProgressStateIndex = IndexForField(FooterProgressStateField, ValueColumn);
+        const QModelIndex UnconfirmedFooterWordIndex = IndexForField(UnconfirmedFooterWordField, ValueColumn);
+        const QModelIndex RawUnconfirmedFooterWordBytesIndex = index(0, ValueColumn, IndexForField(UnconfirmedFooterWordField, 0));
+        const QModelIndex CampaignSideByteIndex = IndexForField(CampaignSideByteField, ValueColumn);
+        const QModelIndex RoseProgressionStateByteIndex = IndexForField(RoseProgressionStateByteField, ValueColumn);
+        const QModelIndex PotentialProfileLossCountIndex = IndexForField(PotentialProfileLossCountField, ValueColumn);
+        const QModelIndex PotentialFooterLossCountIndex = IndexForField(PotentialFooterLossCountField, ValueColumn);
+        const QModelIndex PotentialProfileDuelCountIndex = IndexForField(PotentialProfileDuelCountField, ValueColumn);
+        const QModelIndex ChecksumIndex = IndexForField(ChecksumField, ValueColumn);
+        emit dataChanged(CampaignProgressStateIndex, CampaignProgressStateIndex, { Qt::DisplayRole, Qt::EditRole });
+        emit dataChanged(ProfileProgressStateIndex, ProfileProgressStateIndex, { Qt::DisplayRole });
+        emit dataChanged(FooterProgressStateIndex, FooterProgressStateIndex, { Qt::DisplayRole });
+        emit dataChanged(UnconfirmedFooterWordIndex, UnconfirmedFooterWordIndex, { Qt::DisplayRole });
+        emit dataChanged(RawUnconfirmedFooterWordBytesIndex, RawUnconfirmedFooterWordBytesIndex, { Qt::DisplayRole });
+        emit dataChanged(CampaignSideByteIndex, CampaignSideByteIndex, { Qt::DisplayRole });
+        emit dataChanged(RoseProgressionStateByteIndex, RoseProgressionStateByteIndex, { Qt::DisplayRole });
+        emit dataChanged(PotentialProfileLossCountIndex, PotentialProfileLossCountIndex, { Qt::DisplayRole });
+        emit dataChanged(PotentialFooterLossCountIndex, PotentialFooterLossCountIndex, { Qt::DisplayRole });
+        emit dataChanged(PotentialProfileDuelCountIndex, PotentialProfileDuelCountIndex, { Qt::DisplayRole });
+        emit dataChanged(ChecksumIndex, ChecksumIndex, { Qt::DisplayRole });
+        return true;
+    }
+
+    if(FieldId == UnconfirmedFooterWordField)
     {
         uint16_t NewValue = 0;
         if(!ParseUnsignedValue(Value, &NewValue)) { return false; }
-        if(DORSave_SetMapLocationState(Save, NewValue) != DORStatusOk) { return false; }
+        if(DORSave_SetUnconfirmedFooterWord(Save, NewValue) != DORStatusOk) { return false; }
 
-        const QModelIndex MapLocationStateIndex = IndexForField(MapLocationStateField, ValueColumn);
-        const QModelIndex RawMapLocationStateBytesIndex = index(0, ValueColumn, IndexForField(MapLocationStateField, 0));
+        const QModelIndex UnconfirmedFooterWordIndex = IndexForField(UnconfirmedFooterWordField, ValueColumn);
+        const QModelIndex RawUnconfirmedFooterWordBytesIndex = index(0, ValueColumn, IndexForField(UnconfirmedFooterWordField, 0));
         const QModelIndex FooterProgressStateIndex = IndexForField(FooterProgressStateField, ValueColumn);
+        const QModelIndex CampaignProgressStateIndex = IndexForField(CampaignProgressStateField, ValueColumn);
         const QModelIndex ChecksumIndex = IndexForField(ChecksumField, ValueColumn);
-        emit dataChanged(MapLocationStateIndex, MapLocationStateIndex, { Qt::DisplayRole, Qt::EditRole });
-        emit dataChanged(RawMapLocationStateBytesIndex, RawMapLocationStateBytesIndex, { Qt::DisplayRole });
+        emit dataChanged(UnconfirmedFooterWordIndex, UnconfirmedFooterWordIndex, { Qt::DisplayRole, Qt::EditRole });
+        emit dataChanged(RawUnconfirmedFooterWordBytesIndex, RawUnconfirmedFooterWordBytesIndex, { Qt::DisplayRole });
         emit dataChanged(FooterProgressStateIndex, FooterProgressStateIndex, { Qt::DisplayRole });
+        emit dataChanged(CampaignProgressStateIndex, CampaignProgressStateIndex, { Qt::DisplayRole });
         emit dataChanged(ChecksumIndex, ChecksumIndex, { Qt::DisplayRole });
         return true;
     }
@@ -694,8 +784,11 @@ Qt::ItemFlags DORInfoTabModel::FieldFlags(Field FieldId, int Column) const
 {
     if(Column == ValueColumn && Save != nullptr &&
        (FieldId == PlayerNameField ||
-        FieldId == MapLocationStateField ||
-        FieldId == PotentialCampaignSideFlagField ||
+        FieldId == UnconfirmedFooterWordField ||
+        FieldId == FooterProgressStateField ||
+        FieldId == CampaignProgressStateField ||
+        FieldId == CampaignSideByteField ||
+        FieldId == RoseProgressionStateByteField ||
         FieldId == PotentialProfileLossCountField ||
         FieldId == PotentialProfileDuelCountField))
     {
@@ -886,12 +979,12 @@ QString DORInfoTabModel::ProgressFooterStateBytes() const
     return BytesToHex(Info.FooterStateBytes, DORProgressFooterStateByteCount);
 }
 
-QString DORInfoTabModel::MapLocationState() const
+QString DORInfoTabModel::UnconfirmedFooterWord() const
 {
     DORProgressInfo Info = {};
     if(!GetProgressInfo(&Info)) { return QString(); }
 
-    const uint16_t Value = DORProgressInfo_GetMapLocationState(&Info);
+    const uint16_t Value = DORProgressInfo_GetUnconfirmedFooterWord(&Info);
     return HexValue(Value, 4);
 }
 
@@ -907,12 +1000,20 @@ QString DORInfoTabModel::ProgressCampaignStateBytes() const
     return BytesToHex(Bytes, ByteCount);
 }
 
-QString DORInfoTabModel::PotentialCampaignSideFlag() const
+QString DORInfoTabModel::CampaignSideByte() const
 {
     DORProgressInfo Info = {};
     if(!GetProgressInfo(&Info)) { return QString(); }
 
-    return ByteCountValue(DORProgressInfo_GetPotentialCampaignSideFlag(&Info));
+    return ByteCountValue(DORProgressInfo_GetCampaignSideByte(&Info));
+}
+
+QString DORInfoTabModel::RoseProgressionStateByte() const
+{
+    DORProgressInfo Info = {};
+    if(!GetProgressInfo(&Info)) { return QString(); }
+
+    return ByteCountValue(DORProgressInfo_GetRoseProgressionStateByte(&Info));
 }
 
 QString DORInfoTabModel::PotentialProfileLossCount() const
@@ -939,7 +1040,7 @@ QString DORInfoTabModel::PotentialProfileDuelCount() const
     return ByteCountValue(DORProgressInfo_GetPotentialProfileDuelCount(&Info));
 }
 
-QString DORInfoTabModel::RawMapLocationStateBytes() const
+QString DORInfoTabModel::RawUnconfirmedFooterWordBytes() const
 {
     DORProgressInfo Info = {};
     if(!GetProgressInfo(&Info)) { return QString(); }
